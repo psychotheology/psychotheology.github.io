@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Website</title>
+  <style>
+    :root { --bg: #f5f2eb; --ink: #2b2b2b; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      width: min(80vmin, 640px);
+      height: min(80vmin, 640px);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="globe"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script>
+    const canvas = document.getElementById('globe');
+    const ctx = canvas.getContext('2d');
+    const W = (canvas.width = 1000);
+    const H = (canvas.height = 1000);
+
+    const projection = d3.geoOrthographic()
+      .scale(470)
+      .translate([W / 2, H / 2])
+      .clipAngle(90);
+    const path = d3.geoPath(projection, ctx);
+    const sphere = { type: 'Sphere' };
+    const graticule = d3.geoGraticule10();
+
+    d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json').then(world => {
+      const land = topojson.feature(world, world.objects.land);
+
+      d3.timer(elapsed => {
+        projection.rotate([elapsed * 0.01, -20]); // ~10 degrees per second
+        ctx.clearRect(0, 0, W, H);
+
+        ctx.beginPath(); path(sphere);
+        ctx.fillStyle = '#ebe6da'; ctx.fill();
+
+        ctx.beginPath(); path(graticule);
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1; ctx.stroke();
+
+        ctx.beginPath(); path(land);
+        ctx.fillStyle = '#2b2b2b'; ctx.fill();
+
+        ctx.beginPath(); path(sphere);
+        ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 2; ctx.stroke();
+      });
+    });
+  </script>
+</body>
+</html>
