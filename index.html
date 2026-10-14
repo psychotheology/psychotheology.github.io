@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Website</title>
+  <title>Psychotheology</title>
   <style>
     :root { --bg: #f5f2eb; --ink: #2b2b2b; }
     html, body { height: 100%; margin: 0; }
@@ -42,7 +42,7 @@
       const land = topojson.feature(world, world.objects.land);
 
       d3.timer(elapsed => {
-        projection.rotate([elapsed * 0.01, -20]); // ~10 degrees per second
+        projection.rotate([elapsed * 0.01, -60]); // ~10 degrees per second
         ctx.clearRect(0, 0, W, H);
 
         ctx.beginPath(); path(sphere);
