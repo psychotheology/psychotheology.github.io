@@ -42,7 +42,7 @@
       const land = topojson.feature(world, world.objects.land);
 
       d3.timer(elapsed => {
-        projection.rotate([elapsed * 0.01, -60]); // ~10 degrees per second
+        projection.rotate([elapsed * 0.01, -20]); // ~10 degrees per second
         ctx.clearRect(0, 0, W, H);
 
         ctx.beginPath(); path(sphere);
