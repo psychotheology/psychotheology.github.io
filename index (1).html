@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Psychotheology</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root { --bg: #f8f8ff; --ink: #2b2b2b; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    display: grid;
+    grid-template-rows: 1fr auto 1fr; /* top band | globe | bottom band */
+    justify-items: center;            /* center everything horizontally */
+  }
+  h1 {
+    font-family: "Times New Roman", Times, serif;
+    font-weight: bold;
+    font-size: 2rem;
+    color: var(--ink);
+    align-self: center;               /* center vertically within the top band */
+    margin: 0;
+  }
+  canvas {
+    width: min(50vmin, 640px);
+    height: min(50vmin, 640px);
+  }
+  canvas.over { cursor: none; }       /* hide the real cursor while over the globe */
+
+  /* The plane that replaces the cursor over the globe */
+  #plane {
+    position: fixed;
+    left: 0;
+    top: 0;
+    pointer-events: none;             /* never blocks the mouse */
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  #plane.on { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>PSYCHOTHEOLOGY</h1>
+<canvas id="globe" aria-label="Rotating globe"></canvas>
+
+<svg id="plane" width="32" height="32" viewBox="-4 -4 32 32" aria-hidden="true">
+  <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="#2b2b2b"/>
+</svg>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script>
+  const canvas = document.getElementById('globe');
+  const ctx = canvas.getContext('2d');
+  const W = (canvas.width = 1000);
+  const H = (canvas.height = 1000);
+
+  const projection = d3.geoOrthographic()
+    .scale(470)
+    .translate([W / 2, H / 2])
+    .clipAngle(90);
+
+  const path = d3.geoPath(projection, ctx);
+  const sphere = { type: 'Sphere' };
+  const graticule = d3.geoGraticule10();
+
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json').then(world => {
+    const land = topojson.feature(world, world.objects.land);
+
+    d3.timer(elapsed => {
+      projection.rotate([elapsed * 0.01, -20]); // ~10 degrees per second
+      ctx.clearRect(0, 0, W, H);
+
+      ctx.beginPath(); path(sphere);
+      ctx.fillStyle = '#f8f8ff'; ctx.fill();
+
+      ctx.beginPath(); path(graticule);
+      ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1; ctx.stroke();
+
+      ctx.beginPath(); path(land);
+      ctx.fillStyle = '#2b2b2b'; ctx.fill();
+
+      ctx.beginPath(); path(sphere);
+      ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 2; ctx.stroke();
+    });
+  });
+
+  // ---- Plane cursor ----
+  // The browser can't change how fast the real mouse pointer moves, so over the
+  // globe the real cursor is hidden and a plane trails behind it instead.
+  const plane = document.getElementById('plane');
+  const FOLLOW = 0.08;  // 0.01 = very slow and floaty, 1 = no lag (try 0.03 to 0.2)
+  const TURN = 0.15;    // how quickly the plane turns toward its heading
+  const GLOBE_R = 0.47; // globe radius as a fraction of the canvas (470 / 1000)
+
+  let mx = 0, my = 0;   // where the real mouse is
+  let px = 0, py = 0;   // where the plane is (lags behind the mouse)
+  let angle = 0;        // plane rotation in degrees
+  let over = false;
+
+  canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width - 0.5;
+    const y = (e.clientY - r.top) / r.height - 0.5;
+    const inside = Math.hypot(x, y) <= GLOBE_R;
+
+    if (inside && !over) { px = e.clientX; py = e.clientY; } // start at the mouse on entry
+    over = inside;
+    mx = e.clientX;
+    my = e.clientY;
+
+    canvas.classList.toggle('over', inside);
+    plane.classList.toggle('on', inside);
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    over = false;
+    canvas.classList.remove('over');
+    plane.classList.remove('on');
+  });
+
+  (function fly() {
+    const dx = mx - px;
+    const dy = my - py;
+    px += dx * FOLLOW;
+    py += dy * FOLLOW;
+
+    // Point toward where the mouse is heading (the plane's nose faces up at 0deg)
+    if (Math.hypot(dx, dy) > 1) {
+      const target = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+      angle += (((target - angle + 540) % 360) - 180) * TURN; // take the shortest turn
+    }
+
+    plane.style.transform = `translate(${px - 16}px, ${py - 16}px) rotate(${angle}deg)`;
+    requestAnimationFrame(fly);
+  })();
+</script>
+</body>
+</html>
