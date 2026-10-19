@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Elliot</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background: #222;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      background: #e9e3d1;               /* landlord special */
+      box-shadow: 0 0 0 8px #8b856f;     /* the walls */
+    }
+  </style>
+</head>
+<body>
+  <canvas id="room" width="800" height="500"></canvas>
+
+  <script>
+    // 1. SETUP: grab the canvas and a "pen" to draw with
+    const canvas = document.getElementById("room");
+    const ctx = canvas.getContext("2d");
+
+    // 2. STATE: everything we need to remember about Elliot
+    const elliot = {
+      x: 400, y: 150,     // position
+      vx: 0, vy: 0,       // velocity (how far he moves each frame)
+      radius: 30
+    };
+    const GRAVITY = 0.5;  // added to vy every frame
+    const BOUNCE = 0.7;   // 1 = perfect bounce, 0 = no bounce
+
+    let dragging = false;
+    let mouse = { x: 0, y: 0 };
+
+    // 3. INPUT: listen for the mouse
+    function getMouse(event) {
+      const box = canvas.getBoundingClientRect();
+      return { x: event.clientX - box.left, y: event.clientY - box.top };
+    }
+
+    canvas.addEventListener("pointerdown", function (event) {
+      mouse = getMouse(event);
+      const dx = mouse.x - elliot.x;
+      const dy = mouse.y - elliot.y;
+      if (Math.sqrt(dx * dx + dy * dy) < elliot.radius) {
+        dragging = true;
+      }
+    });
+
+    window.addEventListener("pointermove", function (event) {
+      mouse = getMouse(event);
+    });
+
+    window.addEventListener("pointerup", function () {
+      dragging = false;
+    });
+
+    // 4. UPDATE: change the numbers a little bit, every frame
+    function update() {
+      if (dragging) {
+        // follow the mouse; the distance moved becomes his velocity
+        elliot.vx = mouse.x - elliot.x;
+        elliot.vy = mouse.y - elliot.y;
+      } else {
+        elliot.vy += GRAVITY;
+      }
+
+      elliot.x += elliot.vx;
+      elliot.y += elliot.vy;
+
+      // walls: push Elliot back inside and flip his velocity
+      if (elliot.x < elliot.radius) {
+        elliot.x = elliot.radius;
+        elliot.vx *= -BOUNCE;
+      }
+      if (elliot.x > canvas.width - elliot.radius) {
+        elliot.x = canvas.width - elliot.radius;
+        elliot.vx *= -BOUNCE;
+      }
+      if (elliot.y < elliot.radius) {
+        elliot.y = elliot.radius;
+        elliot.vy *= -BOUNCE;
+      }
+      if (elliot.y > canvas.height - elliot.radius) {
+        elliot.y = canvas.height - elliot.radius;
+        elliot.vy *= -BOUNCE;
+        elliot.vx *= 0.95;                          // floor friction
+        if (Math.abs(elliot.vy) < 1) elliot.vy = 0; // stop tiny jitter
+      }
+    }
+
+    // 5. DRAW: erase everything, then paint Elliot
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.arc(elliot.x, elliot.y, elliot.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#3f7f8c";
+      ctx.fill();
+    }
+
+    // 6. LOOP: do update + draw about 60 times per second
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>
