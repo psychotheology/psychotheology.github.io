@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Throw Elliot</title>
+<style>
+  html,body{margin:0;height:100%;background:#1d1c1a;overflow:hidden;touch-action:none}
+  canvas{display:block;width:100%;height:100%;cursor:grab}
+  canvas.down{cursor:grabbing}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const PAINT = '#e9e3d1';      // landlord special
+const PAINT_DARK = '#d6cfba'; // shadowed wall edge
+const FLOOR = '#c9c1a9';
+let W, H, room, dpr;
+
+function resize(){
+  dpr = window.devicePixelRatio || 1;
+  W = innerWidth; H = innerHeight;
+  cv.width = W*dpr; cv.height = H*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const m = Math.min(W,H) < 600 ? 12 : 32;
+  const w = Math.min(W-m*2, 1000), h = Math.min(H-m*2, 640);
+  room = {x:(W-w)/2, y:(H-h)/2, w, h};
+}
+addEventListener('resize', resize); resize();
+
+// ---- Elliot: verlet points + distance constraints ----
+const names = ['head','chest','pelvis','lElbow','lHand','rElbow','rHand','lKnee','lFoot','rKnee','rFoot'];
+const offs = [[0,-42],[0,-22],[0,8],[-14,-20],[-26,-10],[14,-20],[26,-10],[-6,24],[-8,40],[6,24],[8,40]];
+const P = {}; let pts = [];
+const radius = {head:16};
+function spawn(cx, cy){
+  pts = names.map((n,i)=>({n, x:cx+offs[i][0], y:cy+offs[i][1], px:cx+offs[i][0], py:cy+offs[i][1], r:radius[n]||5}));
+  names.forEach((n,i)=>P[n]=pts[i]);
+  // a little tumble on spawn
+  pts.forEach(p=>{p.px -= 6; p.py += 4;});
+}
+const link = (a,b,k=1)=>({a:P[a],b:P[b],k,d:Math.hypot(P[a].x-P[b].x,P[a].y-P[b].y)});
+let cons = [];
+function build(){
+  cons = [
+    link('head','chest'), link('chest','pelvis'),
+    link('chest','lElbow'), link('lElbow','lHand'),
+    link('chest','rElbow'), link('rElbow','rHand'),
+    link('pelvis','lKnee'), link('lKnee','lFoot'),
+    link('pelvis','rKnee'), link('rKnee','rFoot'),
+    link('head','pelvis',0.25),   // floppy spine
+    link('lElbow','rElbow',0.5),  // shoulders
+    link('lKnee','rKnee',0.05),   // legs stay apart-ish
+    link('lElbow','pelvis',0.3), link('rElbow','pelvis',0.3)
+  ];
+}
+spawn(room.x+room.w/2, room.y+room.h*0.4); build();
+
+// ---- input ----
+let mouse = {x:0,y:0}, grab = null;
+function pos(e){ const r = cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+cv.addEventListener('pointerdown', e=>{
+  cv.setPointerCapture(e.pointerId);
+  mouse = pos(e);
+  let best = null, bd = 45;
+  for(const p of pts){ const d = Math.hypot(p.x-mouse.x,p.y-mouse.y) - p.r; if(d<bd){bd=d;best=p;} }
+  grab = best; if(grab) cv.classList.add('down');
+});
+cv.addEventListener('pointermove', e=>{ mouse = pos(e); });
+const release = ()=>{ grab = null; cv.classList.remove('down'); };
+cv.addEventListener('pointerup', release);
+cv.addEventListener('pointercancel', release);
+addEventListener('keydown', e=>{ if(e.key==='r'){ spawn(room.x+room.w/2, room.y+room.h*0.4); build(); }});
+
+// ---- physics ----
+const G = 0.55, DAMP = 0.995, BOUNCE = 0.55, MAXV = 45;
+function step(){
+  for(const p of pts){
+    if(p===grab){
+      const ox=p.x, oy=p.y;
+      p.x += (mouse.x-p.x)*0.45; p.y += (mouse.y-p.y)*0.45;
+      p.px = ox; p.py = oy; // keeps last motion as throw velocity
+      continue;
+    }
+    let vx=(p.x-p.px)*DAMP, vy=(p.y-p.py)*DAMP;
+    const s=Math.hypot(vx,vy); if(s>MAXV){vx*=MAXV/s;vy*=MAXV/s;}
+    p.px=p.x; p.py=p.y; p.x+=vx; p.y+=vy+G;
+  }
+  for(let it=0; it<8; it++){
+    for(const c of cons){
+      const dx=c.b.x-c.a.x, dy=c.b.y-c.a.y, d=Math.hypot(dx,dy)||0.001;
+      const diff=(d-c.d)/d*0.5*c.k, ox=dx*diff, oy=dy*diff;
+      if(c.a!==grab){c.a.x+=ox;c.a.y+=oy;}
+      if(c.b!==grab){c.b.x-=ox;c.b.y-=oy;}
+    }
+    for(const p of pts) wall(p);
+  }
+}
+function wall(p){
+  const l=room.x+p.r, r=room.x+room.w-p.r, t=room.y+p.r, b=room.y+room.h-p.r;
+  let vx=p.x-p.px, vy=p.y-p.py;
+  if(p.x<l){p.x=l;p.px=p.x+vx*BOUNCE;}
+  else if(p.x>r){p.x=r;p.px=p.x+vx*BOUNCE;}
+  if(p.y<t){p.y=t;p.py=p.y+vy*BOUNCE;}
+  else if(p.y>b){p.y=b;p.py=p.y+vy*BOUNCE; p.px+=(p.x-p.px)*0.12;} // floor friction
+}
+
+// ---- drawing ----
+function limb(a,b,w,col){
+  ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+}
+function drawRoom(){
+  ctx.fillStyle=PAINT; ctx.fillRect(room.x,room.y,room.w,room.h);
+  // floor strip + baseboard
+  const fh=Math.min(36,room.h*0.08);
+  ctx.fillStyle=FLOOR; ctx.fillRect(room.x,room.y+room.h-fh,room.w,fh);
+  ctx.fillStyle='#f6f2e6'; ctx.fillRect(room.x,room.y+room.h-fh-5,room.w,5);
+  // inner shadow
+  const g=ctx.createLinearGradient(0,room.y,0,room.y+room.h);
+  g.addColorStop(0,'rgba(0,0,0,.08)'); g.addColorStop(.15,'rgba(0,0,0,0)');
+  ctx.fillStyle=g; ctx.fillRect(room.x,room.y,room.w,room.h);
+  ctx.strokeStyle=PAINT_DARK; ctx.lineWidth=6; ctx.strokeRect(room.x,room.y,room.w,room.h);
+  ctx.strokeStyle='#8b856f'; ctx.lineWidth=3; ctx.strokeRect(room.x-1.5,room.y-1.5,room.w+3,room.h+3);
+  ctx.fillStyle='rgba(60,55,40,.45)'; ctx.font='13px system-ui,sans-serif'; ctx.textAlign='center';
+  ctx.fillText('drag and throw Elliot  ·  press R to reset', room.x+room.w/2, room.y+room.h-12);
+}
+function drawElliot(){
+  const skin='#f2c9a0', shirt='#3f7f8c', pants='#4a4a5a';
+  // shadow
+  ctx.fillStyle='rgba(0,0,0,.12)';
+  const fy=room.y+room.h-14;
+  ctx.beginPath(); ctx.ellipse(P.pelvis.x,fy,26,5,0,0,7); ctx.fill();
+  limb(P.pelvis,P.lKnee,9,pants); limb(P.lKnee,P.lFoot,9,pants);
+  limb(P.pelvis,P.rKnee,9,pants); limb(P.rKnee,P.rFoot,9,pants);
+  limb(P.chest,P.lElbow,7,shirt); limb(P.lElbow,P.lHand,6,skin);
+  limb(P.chest,P.rElbow,7,shirt); limb(P.rElbow,P.rHand,6,skin);
+  limb(P.chest,P.pelvis,22,shirt);
+  // head
+  const h=P.head, a=Math.atan2(h.y-P.chest.y,h.x-P.chest.x)+Math.PI/2;
+  ctx.save(); ctx.translate(h.x,h.y); ctx.rotate(a);
+  ctx.fillStyle=skin; ctx.strokeStyle='#8a5f3c'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,0,16,0,7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#2b2118';
+  if(grab){ // startled
+    ctx.beginPath(); ctx.arc(-5,-3,3,0,7); ctx.arc(5,-3,3,0,7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0,7,3,4,0,0,7); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(-5,-3,2,0,7); ctx.arc(5,-3,2,0,7); ctx.fill();
+    ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,5,4,0.1*Math.PI,0.9*Math.PI); ctx.stroke();
+  }
+  ctx.restore();
+}
+function frame(){
+  ctx.fillStyle='#1d1c1a'; ctx.fillRect(0,0,W,H);
+  step(); step();
+  drawRoom(); drawElliot();
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
